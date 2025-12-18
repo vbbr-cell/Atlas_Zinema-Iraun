@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zinema Iraun – Archivo de Senales</title>
+<style>
+    body {
+        background: #0b0b0b;
+        color: #f5f5f5;
+        font-family: 'Courier New', monospace;
+        margin: 0;
+        padding: 0;
+    }
+
+    h1 {
+        text-align: center;
+        margin: 2rem 0;
+        color: #00ffe0;
+        text-shadow: 0 0 10px #00ffe0;
+    }
+
+    /* Upload Form */
+    #uploadForm {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        margin: 2rem;
+        gap: 1rem;
+    }
+
+    input, button {
+        padding: 0.5rem;
+        font-size: 1rem;
+    }
+
+    button {
+        cursor: pointer;
+        background: #00ffe0;
+        color: #0b0b0b;
+        border: none;
+        border-radius: 5px;
+        font-weight: bold;
+        transition: transform 0.2s;
+    }
+
+    button:hover {
+        transform: scale(1.05);
+    }
+
+    #message {
+        text-align: center;
+        margin-top: 1rem;
+    }
+
+    /* Gallery */
+    #gallery {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        margin: 2rem;
+        gap: 1rem;
+    }
+
+    .gallery-image {
+        max-width: 250px;
+        transition: transform 0.3s;
+        box-shadow: 0 0 20px rgba(0, 255, 224, 0.2);
+        border: 2px solid rgba(0, 255, 224, 0.3);
+        transform: rotate(calc(-5deg + 10deg * var(--rand)));
+    }
+
+    .gallery-image:hover {
+        transform: scale(1.1) rotate(calc(-5deg + 10deg * var(--rand)));
+        z-index: 1;
+    }
+</style>
+</head>
+<body>
+
+<h1>Zinema Iraun – Archivo de Senales</h1>
+
+<!-- UPLOAD FORM -->
+<form id="uploadForm">
+    <label>Tu nombre / Izena (opcional):
+        <input type="text" id="contributor">
+    </label>
+    <label>Título / Izenburua (opcional):
+        <input type="text" id="title">
+    </label>
+    <label>Imagen / Irudia:
+        <input type="file" id="fileInput" accept="image/*" required>
+    </label>
+    <button type="submit">Enviar / Bidali</button>
+</form>
+<div id="message"></div>
+
+<hr style="border-color: #00ffe0; margin: 3rem 0;">
+
+<!-- GALLERY -->
+<div id="gallery"></div>
+
+<!-- SUPABASE -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/supabase.min.js"></script>
+<script>
+    // Initialize Supabase
+    const supabaseUrl = 'https://YOUR_SUPABASE_URL.supabase.co';
+    const supabaseKey = 'YOUR_PUBLIC_ANON_KEY';
+    const supabase = supabase.createClient(supabaseUrl, supabaseKey);
+
+    // Upload form logic
+    document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+
+        const file = document.getElementById('fileInput').files[0];
+        const contributor = document.getElementById('contributor').value;
+        const title = document.getElementById('title').value;
+
+        if (!file) {
+            alert("Por favor, selecciona un archivo / Mesedez, hautatu fitxategi bat");
+            return;
+        }
+
+        const filePath = `${Date.now()}-${file.name}`;
+
+        // Upload to senales bucket
+        const { data: uploadData, error: uploadError } = await supabase.storage
+            .from('senales')
+            .upload(filePath, file);
+
+        if (uploadError) {
+            document.getElementById('message').textContent = "Error subiendo la imagen / Irudia igotzean errorea";
+            console.error(uploadError);
+            return;
+        }
+
+        // Insert metadata in archivo table
+        const { data: rowData, error: insertError } = await supabase
+            .from('archivo')
+            .insert([
+                { image_path: filePath, contributor: contributor, title: title, approved: false }
+            ]);
+
+        if (insertError) {
+            document.getElementById('message').textContent = "Error guardando metadata / Metadata gordetzean errorea";
+            console.error(insertError);
+            return;
+        }
+
+        document.getElementById('message').textContent = "¡Señal enviada! / Seinale bidalia!";
+        document.getElementById('uploadForm').reset();
+
+        // Refresh gallery
+        loadGallery();
+    });
+
+    // Load public gallery
+    async function loadGallery() {
+        const { data: images, error } = await supabase
+            .from('archivo')
+            .select('*')
+            .eq('approved', true)
+            .order('created_at', { ascending: false });
+
+        if (error) {
+            console.error(error);
+            return;
+        }
+
+        const gallery = document.getElementById('gallery');
+        gallery.innerHTML = '';
+
+        images.forEach(img => {
+            const imgEl = document.createElement('img');
+            imgEl.src = `https://YOUR_SUPABASE_URL.supabase.co/storage/v1/object/public/senales/${img.image_path}`;
+            imgEl.alt = img.title || "Señal / Seinale";
+            imgEl.classList.add('gallery-image');
+            imgEl.style.setProperty('--rand', Math.random());
+            gallery.appendChild(imgEl);
+        });
+    }
+
+    loadGallery();
+</script>
+
+</body>
+</html>
